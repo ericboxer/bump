@@ -23,6 +23,10 @@ var (
 	}
 )
 
+var (
+	BUMPVER string
+)
+
 // Commandline bools
 var (
 	shouldBumpMajor bool
@@ -30,6 +34,9 @@ var (
 	shouldBumpPatch bool
 
 	shouldDryRun bool
+	shouldGitTag bool
+
+	shouldMake bool
 )
 
 func bumpMajor() {
@@ -63,12 +70,19 @@ func main() {
 	// Setup our flags
 	flag.BoolVar(&shouldBumpMajor, "M", false, "Bumps the major version")
 	flag.BoolVar(&shouldBumpMinor, "m", false, "Bumps the minor version")
-	flag.BoolVar(&shouldBumpPatch, "p", true, "Bumps the patch version")
+	flag.BoolVar(&shouldBumpPatch, "p", false, "Bumps the patch version")
 
 	// flag.BoolVar(&shouldDryRun, "dry-run", false, "Shows what the outcome of running the bump command would be without making changes")
 	flag.BoolVar(&shouldDryRun, "d", false, "Shows what the outcome of running the bump command would be without making changes")
 
+	flag.BoolVar(&shouldGitTag, "t", false, "Adds a tag with the current version number to the current commit")
+	flag.BoolVar(&shouldMake, "make", false, "Runs Make with the variables MAJOR, MINOR, and PATCH")
+
 	flag.Parse()
+
+	fmt.Println("*******************")
+	fmt.Printf("Bump Version %v\n", BUMPVER)
+	fmt.Println("*******************")
 
 	if shouldDryRun {
 		fmt.Println("*******************")
@@ -85,21 +99,28 @@ func main() {
 			writeVersion()
 
 		} else {
-			panic(err)
+			panic(err.Error())
 		}
+
+		fmt.Println("VERSION file found...")
 
 	}
 
 	err = json.Unmarshal(dat, &currentVersion)
 
 	if err != nil {
-		panic(err)
+
+		if strings.Contains(err.Error(), "unexpected end of JSON input") {
+			fmt.Println("Unexpected end of JSON")
+		} else {
+			panic(err.Error())
+
+		}
 	}
 
 	fmt.Printf("Current Version: %d.%d.%d\n", currentVersion.MAJOR, currentVersion.MINOR, currentVersion.PATCH)
 
-	// Run these in reveres order. Extra work, but its so small who cares.
-
+	// Run these in reveres order. It's a bad way of handling mutual exclusivity.
 	if shouldBumpPatch {
 		bumpPatch()
 	}
@@ -118,12 +139,43 @@ func main() {
 		writeVersion()
 	}
 
-	gitTag := exec.Command("git", "tag", fmt.Sprintf("v%d.%d.%d", currentVersion.MAJOR, currentVersion.MINOR, currentVersion.PATCH))
+	if shouldGitTag {
 
-	err = gitTag.Run()
+		gitTagVal := fmt.Sprintf("v%d.%d.%d", currentVersion.MAJOR, currentVersion.MINOR, currentVersion.PATCH)
+		gitTag := exec.Command("git", "tag", gitTagVal)
+		err = gitTag.Run()
 
-	if err != nil {
-		panic(err)
+		fmt.Printf("Git tag %s created", gitTagVal)
+
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if shouldMake {
+
+		// Make sure the makefile exists
+
+		_, err := os.Stat("makefile")
+
+		if err != nil {
+
+			fmt.Println("makefile was not found...")
+
+		} else {
+
+			makeCmdVer := fmt.Sprintf("SEMVER=%d.%d.%d", currentVersion.MAJOR, currentVersion.MINOR, currentVersion.PATCH)
+			makeCmd := exec.Command("make", "buildall", makeCmdVer)
+
+			// Set the makefile output to standard out se we cal see whats going on
+			makeCmd.Stdout = os.Stdout
+			err = makeCmd.Run()
+
+			if err != nil {
+				panic(err.Error())
+			}
+		}
+
 	}
 
 	os.Exit(0)
