@@ -6,12 +6,12 @@ LDFLAGS="-X 'main.BUMPVER=$(SEMVER)'"
 
 
 
-all:
+buildall:
 	@echo "Building All Files"
 	@echo $(LDFLAGS)
 	make macOS
-	# make windows
-	# make linux
+	make windows
+	make linux
 
 macOS:
 	@echo "Making Macos..."
